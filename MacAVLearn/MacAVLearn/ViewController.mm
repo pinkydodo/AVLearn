@@ -58,7 +58,7 @@ std::vector<CWindowInfo> getWindowsList()
 {
     std::vector<CWindowInfo> winList;
 //    kCGWindowListExcludeDesktopElements
-    NSArray* arr = (__bridge NSArray*)CGWindowListCopyWindowInfo( kCGWindowListOptionOnScreenOnly  , kCGNullWindowID );
+    NSArray* arr = (__bridge NSArray*)CGWindowListCopyWindowInfo( kCGWindowListOptionAll  , kCGNullWindowID );
     
     NSArray* arrOrder = [arr sortedArrayUsingComparator:win_info_cmp];
 
@@ -160,6 +160,9 @@ static void OnEventReceived(
     getWindowsList();
     // Do any additional setup after loading the view.
     this_ptr = self;
+    
+    NSURL *URL = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"];
+    [[NSWorkspace sharedWorkspace] openURL:URL];
     
 //    self window
 }
@@ -282,7 +285,7 @@ static void OnEventReceived(
 - (IBAction)moveWindow:(NSButton *)sender {
     NSLog(@"move Window");
     int ownerId    = 97358;
-    
+//    kCGWindowSharingState
     if( m_appRef == NULL )
     {
         m_appRef = AXUIElementCreateApplication(ownerId);

@@ -299,8 +299,10 @@ CGImageRef CreateExcludedWindowRegionImage( CGWindowID wnd )
 }
 
 
+
 int ScreenCaptureMac::configure( Settings setting)
 {
+
     MacDesktopConfig config = MacDesktopConfig::GetCurrent();
     m_displayID = setting.displayIndex;
     DisplayInfo* info = static_cast<DisplayInfo*>(displays[setting.displayIndex]->info);
@@ -361,8 +363,11 @@ int ScreenCaptureMac::configure( Settings setting)
     values[0] = (void*) kCFBooleanTrue;
     opts = CFDictionaryCreate(kCFAllocatorDefault, (const void **) keys, (const void **) values, 1, NULL, NULL);
  
-    int outWidth = config.displays[ m_displayID ].pixel_bounds.size.width;
-    int outHeight = config.displays[ m_displayID ].pixel_bounds.size.height;
+//    int outWidth = config.displays[ m_displayID ].pixel_bounds.size.width;
+//    int outHeight = config.displays[ m_displayID ].pixel_bounds.size.height;
+    
+    int outWidth = config.displays[ m_displayID ].bounds.size.width;
+    int outHeight = config.displays[ m_displayID ].bounds.size.height;
     
     //kCGDisplayStreamMinimumFrameTime
 //    CGWindowListCreateImageFromArray
@@ -614,10 +619,10 @@ CGImageRef CreateExcludedWindowRegionImage(const CGRect& pixel_bounds,
     
     window_bounds.origin.x = pixel_bounds.origin.x / dip_to_pixel_scale;
     window_bounds.origin.y = pixel_bounds.origin.y / dip_to_pixel_scale;
-    window_bounds.size.width = pixel_bounds.size.width;
-    window_bounds.size.height = pixel_bounds.size.height;
+    window_bounds.size.width = pixel_bounds.size.width / dip_to_pixel_scale ;
+    window_bounds.size.height = pixel_bounds.size.height / dip_to_pixel_scale;
     
-    return CGWindowListCreateImageFromArray(window_bounds, window_list, kCGWindowImageDefault);
+    return CGWindowListCreateImageFromArray(window_bounds, window_list, kCGWindowImageDefault | kCGWindowImageNominalResolution );
 }
 
 // Copy pixels in the |rect| from |src_place| to |dest_plane|. |rect| should be
@@ -653,29 +658,37 @@ void ScreenCaptureMac::onFrame( void* buffer )
     const uint8_t* display_base_address = 0;
     int src_bytes_per_row = 0;
     
+    float dip_to_pixel_scale  = 1;
+    
     CGImageRef excluded_image = nil;
     CIImage* result_img = nil;
     
+    CIImage* screen_img = [[CIImage alloc] initWithIOSurface:frame ];
     CGRect displayRect;
     CGRect rect;
     CFArrayRef window_list = nil;
     MacDesktopConfig config;
     CGWindowID wnd = m_exclusiveWnd;
+    CGFloat width = 0;
+    CGFloat height = 0 ;
     if( wnd != 0 )
     {
         config = MacDesktopConfig::GetCurrent();
+        dip_to_pixel_scale = config.displays[ m_displayID ].dip_to_pixel_scale;
         displayRect = config.displays[ m_displayID ].pixel_bounds;
-        rect = GetExcludedWindowPixelBounds( wnd,  config.dip_to_pixel_scale );
+        rect = GetExcludedWindowPixelBounds( wnd,  dip_to_pixel_scale  );
         rect = intersectRect( rect, displayRect );
         window_list = CreateWindowListWithExclusion( wnd );
         //如果超出屏幕的部分，不要拷贝哟
-        excluded_image = CreateExcludedWindowRegionImage( rect, config.dip_to_pixel_scale, window_list );
+        excluded_image = CreateExcludedWindowRegionImage( rect, dip_to_pixel_scale, window_list );
     }
         
     if( excluded_image == nil  )
     {
         IOSurfaceLock( frame, kIOSurfaceLockReadOnly, NULL );
         result_img = [[CIImage alloc] initWithIOSurface: frame ];
+        width = IOSurfaceGetWidth( frame );
+        height = IOSurfaceGetHeight( frame );
         IOSurfaceUnlock(frame, kIOSurfaceLockReadOnly, NULL);
     }
     else{
@@ -683,8 +696,8 @@ void ScreenCaptureMac::onFrame( void* buffer )
         uint8* plane= (uint8_t*)IOSurfaceGetBaseAddress(frame);
         int stride = IOSurfaceGetBytesPerRow(frame);
         int size = IOSurfaceGetAllocSize( frame );
-        CGFloat width = IOSurfaceGetWidth( frame );
-        CGFloat height = IOSurfaceGetHeight( frame );
+        width = IOSurfaceGetWidth( frame );
+        height = IOSurfaceGetHeight( frame );
 
         NSData* data = [[NSData alloc] initWithBytes:plane length:size ];
         IOSurfaceUnlock(frame, kIOSurfaceLockReadOnly, NULL);
@@ -695,6 +708,11 @@ void ScreenCaptureMac::onFrame( void* buffer )
         CGRect rectRelativeToDisplay = rect;
         rect.origin.x -= displayRect.origin.x;
         rect.origin.y -= displayRect.origin.y;
+        
+        rectRelativeToDisplay.origin.x /= dip_to_pixel_scale;
+        rectRelativeToDisplay.origin.y /= dip_to_pixel_scale;
+        rectRelativeToDisplay.size.width /= dip_to_pixel_scale;
+        rectRelativeToDisplay.size.height /= dip_to_pixel_scale;
         
 
         
@@ -746,7 +764,7 @@ void ScreenCaptureMac::onFrame( void* buffer )
     // 创建pixelbuffer属性
     CFDictionaryRef optionsDictionary = CFDictionaryCreate(NULL, keys, values, 3, NULL, NULL);
     CVPixelBufferRef newPixcelBuffer = nil;
-    CVPixelBufferCreate(kCFAllocatorDefault, displayRect.size.width, displayRect.size.height , kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, optionsDictionary, &newPixcelBuffer);
+    CVPixelBufferCreate(kCFAllocatorDefault, width, height , kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, optionsDictionary, &newPixcelBuffer);
 
     [context render:result_img toCVPixelBuffer:newPixcelBuffer];
     printf("\n");
